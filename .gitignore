@@ -31,3 +31,9 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Frontend (dependencies and build output; dist/ above also covers frontend/dist)
+node_modules/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
