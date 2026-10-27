@@ -12,5 +12,13 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./lagerflow.db"
 
+    # Public demo (see app/demo.py). Off by default, so local development is unaffected.
+    demo_mode: bool = False
+    demo_reset_minutes: int = 60
+    demo_max_products: int = 60
+    demo_max_movements: int = 2000
+    demo_write_limit_per_minute: int = 20
+    demo_global_write_limit_per_minute: int = 120
+
 
 settings = Settings()
