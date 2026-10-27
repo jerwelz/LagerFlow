@@ -306,3 +306,7 @@ Each test runs against a fresh in-memory SQLite database. The `get_db` dependenc
 - The **CSV export** is comma-separated. A German Excel installation may expect semicolons and show everything in one column; use *Data → From Text/CSV* to import it.
 - All **timestamps are UTC.**
 - pytest shows one **deprecation warning** from Starlette, which recommends `httpx2` instead of `httpx` for the test client. The project keeps `httpx` as planned.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
