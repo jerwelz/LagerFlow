@@ -9,6 +9,7 @@ This is the original plan written before implementation. The README describes th
 - The SKU can be changed via `PATCH`; duplicates return 409.
 - Integer inputs are capped at the 64-bit database limit, so oversized values return 422 instead of 500.
 - The CSV export neutralises cells that spreadsheet programs would run as formulas.
+- After the MVP, a React dashboard (`frontend/`) and a guarded public demo mode (`app/demo.py`, `app/demo_guard.py`) were added. The original plan had no frontend.
 
 ---
 

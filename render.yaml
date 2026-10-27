@@ -1,0 +1,18 @@
+# Render Blueprint for the public LagerFlow demo (free web service).
+# One process serves the API, the Swagger docs (/docs) and the built React dashboard (/).
+# Free instances have an ephemeral filesystem: the demo database is rebuilt from
+# fictional seed data on every start (see app/demo.py).
+services:
+  - type: web
+    name: lagerflow-demo
+    runtime: python
+    plan: free
+    autoDeploy: true
+    buildCommand: pip install -e . && cd frontend && npm ci && npm run build
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: LAGERFLOW_DEMO_MODE
+        value: "true"
+      - key: LAGERFLOW_DATABASE_URL
+        value: sqlite:///./lagerflow-demo.db

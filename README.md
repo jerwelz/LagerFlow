@@ -2,7 +2,22 @@
 
 LagerFlow is a REST API for managing the inventory of a small business. It keeps a product catalogue, records incoming and outgoing stock, and keeps a complete movement history. It also shows which products have fallen below their minimum stock level and exports the inventory as CSV.
 
-I built it as a portfolio project while applying for an apprenticeship as *Fachinformatiker für Anwendungsentwicklung*. The goal was a small backend that is correct, tested and easy to explain, rather than a large feature set. There is no frontend: the API is used through FastAPI's interactive documentation at `/docs`.
+I built it as a portfolio project while applying for an apprenticeship as *Fachinformatiker für Anwendungsentwicklung*. The goal was a small backend that is correct, tested and easy to explain, rather than a large feature set. A small React dashboard (in German) shows the API in action; the API can also be used directly through FastAPI's interactive documentation at `/docs`.
+
+## Live demo
+
+**Live demo:** _the public URL is added here after the first deployment._ The demo runs the dashboard at `/` and the Swagger UI at `/docs` on the same server.
+
+The demo uses **fictional data only**, is shared by all visitors and is reset regularly. See [Demo mode](#demo-mode) for its safeguards and [Deployment](#deployment) to run your own copy.
+
+The dashboard has four areas:
+
+- **Übersicht:** key figures (active products, total units, low and empty stock), recent movements and a reorder list
+- **Artikel:** searchable product table, details with movement history, create, edit and deactivate
+- **Buchungen:** book incoming (`IN`) and outgoing (`OUT`) stock; errors such as insufficient stock are shown in plain language
+- **Bestand:** stock levels against the minimum, with a filter for low stock
+
+Links to the API documentation and the CSV export are in the header. The dashboard only calls the public REST API; stock changes always go through the movement endpoint.
 
 ## Technologies
 
@@ -13,6 +28,12 @@ I built it as a portfolio project while applying for an apprenticeship as *Fachi
 - Pydantic v2 (request validation and response schemas)
 - pytest and HTTPX via FastAPI's `TestClient`
 - Ruff (linting and formatting)
+
+Dashboard (`frontend/`):
+
+- React 19 and TypeScript, built with Vite
+- Tailwind CSS (no component library, no router or state library)
+- Vitest and Testing Library (unit tests), Playwright (end-to-end tests)
 
 ## Features
 
@@ -36,18 +57,27 @@ Rules the API guarantees:
 
 ```
 app/
-├── main.py            FastAPI app: registers routers and error handlers
-├── config.py          Settings (database URL) from environment variables
+├── main.py            FastAPI app: routers, error handlers, serves the built dashboard
+├── config.py          Settings (database URL, demo mode) from environment variables
 ├── database.py        Engine, session factory, get_db dependency, SQLite foreign keys
 ├── models.py          SQLAlchemy models: Product, StockMovement
 ├── schemas.py         Pydantic request and response models
 ├── errors.py          Application errors and the JSON error format
 ├── api/               HTTP layer: routes, status codes, parameters
 ├── services/          Business rules and transaction handling
-└── repositories/      Database queries only
+├── repositories/      Database queries only
+├── demo.py            Fictional demo data and the guarded reset
+└── demo_guard.py      Demo safeguards: rate limits, size caps, periodic reset
 alembic/               Database migrations
 tests/                 pytest test suite
+frontend/              React dashboard (Vite project)
+├── src/api.ts         Typed API client and German error messages
+├── src/views/         Übersicht, Artikel, Buchungen, Bestand
+└── e2e/               Playwright end-to-end tests
+render.yaml            Deployment blueprint for Render
 ```
+
+FastAPI serves the built dashboard from `frontend/dist` (`/` and `/assets`) when it exists. Browser and API share one origin, so no CORS configuration is needed. Unknown paths still return the JSON error format.
 
 Each request passes through three layers:
 
@@ -112,6 +142,10 @@ The `dev` extra installs pytest, HTTPX and Ruff. To install only what the applic
 | Environment variable | Default | Purpose |
 |---|---|---|
 | `LAGERFLOW_DATABASE_URL` | `sqlite:///./lagerflow.db` | SQLAlchemy database URL |
+| `LAGERFLOW_DEMO_MODE` | `false` | Enables the public demo safeguards and seed data (see [Demo mode](#demo-mode)) |
+| `LAGERFLOW_DEMO_RESET_MINUTES` | `60` | Demo only: interval of the automatic reset |
+| `LAGERFLOW_DEMO_MAX_PRODUCTS` / `LAGERFLOW_DEMO_MAX_MOVEMENTS` | `60` / `2000` | Demo only: size caps |
+| `LAGERFLOW_DEMO_WRITE_LIMIT_PER_MINUTE` / `LAGERFLOW_DEMO_GLOBAL_WRITE_LIMIT_PER_MINUTE` | `20` / `120` | Demo only: write requests per client / in total |
 
 The variable can also be set in a `.env` file in the project root. Git ignores that file.
 
@@ -140,6 +174,27 @@ uvicorn app.main:app --reload
 
 - Interactive documentation: http://127.0.0.1:8000/docs
 - OpenAPI schema: http://127.0.0.1:8000/openapi.json
+
+### Dashboard
+
+Requirements: Node.js 20.19 or newer.
+
+```bash
+cd frontend
+npm ci
+npm run dev       # http://localhost:5173, forwards API requests to uvicorn on port 8000
+```
+
+Keep `uvicorn` running in a second terminal. Alternatively, build once with `npm run build`; uvicorn then serves the dashboard itself at http://127.0.0.1:8000/.
+
+Locally the dashboard works on your normal `lagerflow.db`. To try it with the demo data instead, use a separate database file whose name contains `demo`:
+
+```bash
+# Linux / macOS (Windows PowerShell: $env:LAGERFLOW_DEMO_MODE="true"; ...)
+export LAGERFLOW_DEMO_MODE=true LAGERFLOW_DATABASE_URL=sqlite:///./lagerflow-demo.db
+alembic upgrade head
+uvicorn app.main:app
+```
 
 ## API endpoints
 
@@ -277,12 +332,50 @@ The file is UTF-8 with a byte-order mark, so Excel displays umlauts correctly. T
 
 > On Windows, send request bodies with non-ASCII characters as UTF-8, for example `--data-binary @body.json`. Some terminals send another encoding, which the API rejects with `400`.
 
+## Demo mode
+
+The public demo has no login, so `LAGERFLOW_DEMO_MODE=true` adds a few safeguards. They are off by default and do not change the API when disabled.
+
+- **Separate, fictional data.** The demo uses its own database file. The reset refuses to run unless demo mode is on **and** the database file name contains `demo`, so it can never wipe `lagerflow.db`. The seed data (`app/demo.py`) contains 15 invented products (electrical parts, fasteners, tools, packaging, workshop supplies) with normal, low and zero stock and one inactive product. Their stock is calculated from their movement history, and a test checks that both agree.
+- **Reset.** The data is replaced with the seed data on every start and every 60 minutes, in one transaction. `python -m app.demo reset` does the same manually.
+- **Rate limits.** At most 20 write requests per minute per client and 120 in total. Further writes get `429 RATE_LIMITED` with a `Retry-After` header. Reads are not limited.
+- **Size caps.** At most 60 products and 2000 movements; further creates get `409 DEMO_LIMIT_REACHED`.
+- **Integrity unchanged.** All writes go through the normal services and database constraints, so negative stock stays impossible.
+- `GET /demo/info` shows the next reset time and the limits; it exists only in demo mode.
+
+The limits are kept in memory. That is enough for one server process, which is how the demo runs.
+
+## Deployment
+
+The repository contains a [Render](https://render.com) Blueprint (`render.yaml`) for a free web service. A single process serves the API, `/docs` and the dashboard:
+
+- Build: `pip install -e . && cd frontend && npm ci && npm run build`
+- Start: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Environment: `LAGERFLOW_DEMO_MODE=true`, `LAGERFLOW_DATABASE_URL=sqlite:///./lagerflow-demo.db`
+- Python 3.12 (`.python-version`), Node.js from `frontend/package.json`
+
+To deploy your own copy: in the Render dashboard choose **New → Blueprint**, connect the repository and confirm the `lagerflow-demo` service. No secrets are needed.
+
+Free Render services have an ephemeral filesystem and stop after 15 minutes without traffic. That fits the demo: every start begins with fresh seed data. The first request after a pause takes about a minute.
+
 ## Testing
 
 ```bash
 pytest            # run the test suite
 ruff check .      # lint
 ruff format --check .
+```
+
+Dashboard:
+
+```bash
+cd frontend
+npm run lint      # TypeScript type check
+npm test          # Vitest unit tests
+npm run build
+npx playwright install chromium   # once
+npm run e2e       # Playwright: starts the API in demo mode on a temporary database
+BASE_URL=https://<your-demo-url> npm run e2e   # same tests against a deployed demo
 ```
 
 Each test runs against a fresh in-memory SQLite database. The `get_db` dependency is replaced in `tests/conftest.py`, so the tests never touch `lagerflow.db`. The suite covers:
@@ -294,10 +387,17 @@ Each test runs against a fresh in-memory SQLite database. The `get_db` dependenc
 - race conditions, including 20 threads withdrawing stock concurrently from a file-based database
 - consistency between the stock level and the movement history
 - the Alembic migrations (upgrade, downgrade, and agreement with the models)
+- demo mode: seed data consistency, idempotent reset, the reset guard, rate limits, size caps, and that nothing changes when demo mode is off
+- serving the dashboard without exposing other files
+
+The frontend unit tests cover the API client and its German error messages. The end-to-end tests drive a real browser through the dashboard: search, create, `IN` and `OUT` movements, the insufficient-stock error, editing, deactivation, stock filters, the CSV export and the `/docs` link.
 
 ## Known limitations
 
 - **No authentication or authorisation.** Anyone who can reach the API can change data.
+- **The live demo is a shared sandbox, not a production setup.** All visitors see the same data; changes disappear on the next reset. Rate limits and caps reduce abuse, but they are simple in-memory counters for a single process. There is no multi-user support.
+- **Cold starts.** The free hosting plan stops the demo when idle; the first request afterwards takes about a minute.
+- The dashboard's **recent activity** is assembled from the per-product movement history (one request per product), because the API has no global movement list. That is fine for the demo's 15 products, not for large inventories.
 - **SQLite** allows only one writer at a time. Under heavy concurrent load, a request that waits longer than SQLite's 5-second lock timeout fails with a 500. The conditional-UPDATE pattern also works on PostgreSQL, but the project has only been tested with SQLite. The UPDATE uses `RETURNING`, which needs SQLite 3.35+ or PostgreSQL.
 - **Deactivation is one-way.** There is no endpoint to reactivate a product.
 - **Movements are append-only.** A wrong booking is corrected with an opposite movement, not by editing or deleting.
