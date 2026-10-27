@@ -2,7 +2,9 @@
 
 import sqlite3
 from collections.abc import Iterator
+from typing import Annotated
 
+from fastapi import Depends
 from sqlalchemy import Engine, MetaData, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -47,3 +49,7 @@ def get_db() -> Iterator[Session]:
     """FastAPI dependency: one session per request, always closed afterwards."""
     with SessionLocal() as session:
         yield session
+
+
+# Shorthand for route parameters: `db: DbSession` instead of repeating Depends(get_db).
+DbSession = Annotated[Session, Depends(get_db)]

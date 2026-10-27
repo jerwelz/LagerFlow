@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 
+from app.api import products
 from app.errors import register_exception_handlers
 
 app = FastAPI(
@@ -10,6 +11,7 @@ app = FastAPI(
     description="REST API for managing inventory in a small business.",
 )
 register_exception_handlers(app)
+app.include_router(products.router)
 
 
 @app.get("/health", tags=["health"])
