@@ -49,8 +49,13 @@ class SlidingWindowLimiter:
 
 
 def client_ip(request: Request) -> str:
-    # Render's proxy appends the real client address as the last X-Forwarded-For
-    # entry; earlier entries can be set by the client and are ignored.
+    # Render serves onrender.com through Cloudflare, which overwrites CF-Connecting-IP
+    # with the visitor's address. The last X-Forwarded-For hop there is a proxy address
+    # that changes between requests, so it only serves as a fallback for other proxies.
+    connecting = request.headers.get("cf-connecting-ip")
+    if connecting:
+        return connecting.strip()
+    # Earlier X-Forwarded-For entries can be set by the client and are ignored.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[-1].strip()

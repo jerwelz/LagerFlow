@@ -220,6 +220,26 @@ def test_rate_limit_is_tracked_per_forwarded_client(make_demo_client):
     assert (first.status_code, second.status_code, other.status_code) == (201, 429, 201)
 
 
+def test_rate_limit_uses_cloudflare_client_ip_when_present(make_demo_client):
+    # On Render the last X-Forwarded-For hop is a changing proxy address; the
+    # visitor is identified by CF-Connecting-IP, which Cloudflare overwrites.
+    client = make_demo_client(demo_write_limit_per_minute=1)
+
+    def post(sku: str, visitor: str, proxy: str):
+        headers = {"CF-Connecting-IP": visitor, "X-Forwarded-For": f"{visitor}, {proxy}"}
+        return client.post("/products", json={"sku": sku, "name": "Neu"}, headers=headers)
+
+    first = post("CF-1", "203.0.113.5", "10.0.0.1")
+    same_visitor_other_proxy = post("CF-2", "203.0.113.5", "10.0.0.2")
+    other_visitor = post("CF-3", "198.51.100.7", "10.0.0.3")
+
+    assert (first.status_code, same_visitor_other_proxy.status_code, other_visitor.status_code) == (
+        201,
+        429,
+        201,
+    )
+
+
 def test_global_write_limit_applies_across_clients(make_demo_client):
     client = make_demo_client(demo_global_write_limit_per_minute=2)
 

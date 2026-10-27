@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "@playwright/test";
 
 // One end-to-end walk through the dashboard against the real API (local demo server or BASE_URL).
 // Each run uses its own SKU, so it also works on the shared public demo.
@@ -7,6 +7,23 @@ const sku = `E2E-${Date.now()}`;
 async function openTab(page: Page, name: string) {
   await page.getByRole("tab", { name }).click();
 }
+
+// Fail on console errors or uncaught exceptions in every test (tests in this file run serially).
+// The browser also logs the 409/422 responses the tests provoke on purpose; those are expected.
+const expectedHttpError = /status of (409|422) /;
+let problems: string[] = [];
+
+test.beforeEach(({ page }) => {
+  problems = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && !expectedHttpError.test(message.text())) problems.push(message.text());
+  });
+  page.on("pageerror", (error) => problems.push(error.message));
+});
+
+test.afterEach(() => {
+  expect(problems).toEqual([]);
+});
 
 test("overview shows demo data, KPIs, activity and links", async ({ page, request }) => {
   await page.goto("/");
@@ -99,6 +116,12 @@ test("product search, create, movements, insufficient stock, edit and deactivate
   await expect(page.getByText("Keine Artikel gefunden.")).toBeVisible();
   await page.getByLabel("Inaktive anzeigen").check();
   await expect(page.getByRole("table", { name: "Artikelliste" }).getByText("Inaktiv")).toBeVisible();
+
+  // The movement history of the deactivated product stays available
+  await page.getByRole("table", { name: "Artikelliste" }).getByRole("button", { name: "Testartikel geändert" }).click();
+  await expect(page.getByTestId("detail-stock")).toHaveText("7");
+  await expect(history.getByRole("row")).toHaveCount(3);
+  await expect(history.getByRole("row", { name: /E2E Wareneingang/ })).toContainText("+10");
 });
 
 test("stock overview lists levels and filters low stock", async ({ page }) => {
@@ -112,4 +135,20 @@ test("stock overview lists levels and filters low stock", async ({ page }) => {
   await page.getByLabel("Nur unter Mindestbestand").check();
   await expect(table.getByText("Ausreichend")).toHaveCount(0);
   expect(await table.getByRole("row").count()).toBeLessThan(allRows);
+});
+
+test.describe("mobile viewport", () => {
+  const { viewport, deviceScaleFactor, isMobile, hasTouch, userAgent } = devices["Pixel 7"];
+  test.use({ viewport, deviceScaleFactor, isMobile, hasTouch, userAgent });
+
+  test("all tabs render without horizontal scrolling", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("kpi-Aktive Artikel")).not.toHaveText("–");
+    for (const name of ["Übersicht", "Artikel", "Buchungen", "Bestand"]) {
+      await openTab(page, name);
+      await expect(page.getByRole("tab", { name })).toHaveAttribute("aria-selected", "true");
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `horizontal overflow on ${name}`).toBeLessThanOrEqual(0);
+    }
+  });
 });
