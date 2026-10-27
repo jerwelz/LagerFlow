@@ -1,7 +1,7 @@
 # LagerFlow — Implementation Plan
 
 ## Context
-LagerFlow is a small inventory REST API, built as a GitHub portfolio project for FIAE apprenticeship applications (Munich, 2027). The goal is a clean, well-tested MVP that takes about two days and that the author can fully explain in an interview.
+LagerFlow is a small inventory REST API. The goal is a clean, well-tested MVP that takes about two days and whose every part the author can fully explain.
 
 This is the original plan written before implementation. The README describes the finished project. Deviations made during development:
 - `GET /products/{id}/movements` was first reserved as a manual exercise, but was implemented together with milestone 4.
@@ -165,7 +165,7 @@ Return the movement history of one product, newest first, with `limit`/`offset` 
   - pagination
   - 404 for an unknown product
   - movements of other products are not included
-## Five concepts for the interview
+## Five core concepts
 1. **Layered architecture:** why routes, services and repositories are separate, and what each layer is responsible for.
 2. **Transactions and atomicity (ACID):** why the stock update and the movement record must be committed together.
 3. **REST and HTTP status codes:** 201 vs 200, 404 vs 409 vs 422, and why deactivation is a POST action and not a DELETE.

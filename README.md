@@ -1,12 +1,16 @@
 # LagerFlow
 
+**[▶ Live demo: lagerflow-demo.onrender.com](https://lagerflow-demo.onrender.com)** · [API documentation (Swagger UI)](https://lagerflow-demo.onrender.com/docs)
+
+> The demo uses fictional data only. Changes are temporary and are reset every 60 minutes and on every restart. It runs on Render's free plan, so the first request after a period of inactivity can take about a minute while the service wakes up.
+
 LagerFlow is a REST API for managing the inventory of a small business. It keeps a product catalogue, records incoming and outgoing stock, and keeps a complete movement history. It also shows which products have fallen below their minimum stock level and exports the inventory as CSV.
 
-I built it as a portfolio project while applying for an apprenticeship as *Fachinformatiker für Anwendungsentwicklung*. The goal was a small backend that is correct, tested and easy to explain, rather than a large feature set. A small React dashboard (in German) shows the API in action; the API can also be used directly through FastAPI's interactive documentation at `/docs`.
+The focus is a small backend that is correct, tested and easy to follow, rather than a large feature set. A React dashboard (in German) shows the API in action; the API can also be used directly through FastAPI's interactive documentation at `/docs`.
 
 ## Live demo
 
-**Live demo:** _the public URL is added here after the first deployment._ The demo runs the dashboard at `/` and the Swagger UI at `/docs` on the same server.
+**Live demo:** https://lagerflow-demo.onrender.com — an interactive dashboard in German on top of the REST API. You can search products, create and edit them, book incoming and outgoing stock and watch the stock figures update. The Swagger UI runs on the same server at https://lagerflow-demo.onrender.com/docs, so every endpoint can also be tried directly.
 
 The demo uses **fictional data only**, is shared by all visitors and is reset regularly. See [Demo mode](#demo-mode) for its safeguards and [Deployment](#deployment) to run your own copy.
 
@@ -338,7 +342,7 @@ The public demo has no login, so `LAGERFLOW_DEMO_MODE=true` adds a few safeguard
 
 - **Separate, fictional data.** The demo uses its own database file. The reset refuses to run unless demo mode is on **and** the database file name contains `demo`, so it can never wipe `lagerflow.db`. The seed data (`app/demo.py`) contains 15 invented products (electrical parts, fasteners, tools, packaging, workshop supplies) with normal, low and zero stock and one inactive product. Their stock is calculated from their movement history, and a test checks that both agree.
 - **Reset.** The data is replaced with the seed data on every start and every 60 minutes, in one transaction. `python -m app.demo reset` does the same manually.
-- **Rate limits.** At most 20 write requests per minute per client and 120 in total. Further writes get `429 RATE_LIMITED` with a `Retry-After` header. Reads are not limited.
+- **Rate limits.** At most 20 write requests per minute per client and 120 in total. Further writes get `429 RATE_LIMITED` with a `Retry-After` header. Reads are not limited. A client is identified by the `CF-Connecting-IP` header that Cloudflare sets in front of Render, otherwise by the last `X-Forwarded-For` hop.
 - **Size caps.** At most 60 products and 2000 movements; further creates get `409 DEMO_LIMIT_REACHED`.
 - **Integrity unchanged.** All writes go through the normal services and database constraints, so negative stock stays impossible.
 - `GET /demo/info` shows the next reset time and the limits; it exists only in demo mode.
