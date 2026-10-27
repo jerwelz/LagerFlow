@@ -16,6 +16,8 @@ from pydantic import (
     field_validator,
 )
 
+from app.models import MovementType
+
 
 def _normalize_sku(value):
     # Runs before the pattern check (StringConstraints' to_upper would run too late).
@@ -84,3 +86,27 @@ class ProductList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+class StockMovementCreate(BaseModel):
+    """Quantity is always positive; the direction comes from movement_type."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    movement_type: MovementType
+    quantity: int = Field(gt=0, le=1_000_000)
+    reason: Reason | None = None
+
+
+class StockMovementRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    product_id: int
+    movement_type: MovementType
+    quantity: int
+    reason: str | None
+    created_at: datetime

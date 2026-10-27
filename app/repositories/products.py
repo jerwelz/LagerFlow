@@ -1,6 +1,6 @@
 """Database access for products. No business rules and no commits here."""
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Product
@@ -16,6 +16,27 @@ def get_by_sku(db: Session, sku: str) -> Product | None:
 
 def add(db: Session, product: Product) -> None:
     db.add(product)
+
+
+def change_stock(db: Session, product_id: int, delta: int) -> int | None:
+    """Add delta (negative for outgoing stock) in one conditional UPDATE.
+
+    The WHERE clause only matches if the product is active and the result would
+    not be negative. The database checks and changes the value in one step, so
+    two requests cannot both take the last items. Returns the new stock, or
+    None if nothing was updated.
+    """
+    stmt = (
+        update(Product)
+        .where(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+            Product.current_stock + delta >= 0,
+        )
+        .values(current_stock=Product.current_stock + delta)
+        .returning(Product.current_stock)
+    )
+    return db.execute(stmt).scalar_one_or_none()
 
 
 def _apply_filters(stmt: Select, search: str | None, include_inactive: bool) -> Select:
