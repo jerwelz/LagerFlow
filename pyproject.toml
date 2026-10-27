@@ -1,6 +1,6 @@
 [project]
 name = "lagerflow"
-version = "0.1.0"
+version = "1.0.0"
 description = "REST API for small-business inventory management"
 requires-python = ">=3.12"
 dependencies = [

@@ -11,9 +11,42 @@ from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
+
+
+class ErrorDetail(BaseModel):
+    code: str = Field(examples=["PRODUCT_NOT_FOUND"])
+    message: str = Field(examples=["Product 42 not found."])
+    details: Any = None
+
+
+class ErrorResponse(BaseModel):
+    """The body of every error response. Used to document errors in /docs."""
+
+    error: ErrorDetail
+
+
+_ERROR_DESCRIPTIONS = {
+    404: "The product does not exist.",
+    409: "The request conflicts with the current state "
+    "(e.g. duplicate SKU, insufficient stock, inactive product).",
+    422: "The request is invalid (wrong type, out of range, unknown field, ...).",
+}
+
+
+def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
+    """OpenAPI `responses` entries for the given error status codes.
+
+    Declaring 422 here also replaces FastAPI's default 422 schema, which does
+    not match our error format.
+    """
+    return {
+        code: {"model": ErrorResponse, "description": _ERROR_DESCRIPTIONS[code]}
+        for code in status_codes
+    }
 
 
 class AppError(Exception):

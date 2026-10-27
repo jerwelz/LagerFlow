@@ -193,3 +193,32 @@ def test_concurrent_withdrawals_never_make_stock_negative(tmp_path, monkeypatch,
     assert final_stock == 1
     assert len(movements) == 3
     assert final_stock == 10 - sum(m.quantity for m in movements)
+
+
+# --- The cached Product must match the database after a movement -------------------
+
+
+def test_cached_product_matches_database_after_concurrent_change(db_session, make_product):
+    """Regression test: SQLAlchemy used to recalculate the stock in Python.
+
+    Another request adds 2 items after our Product was loaded (cached: 5, real: 7).
+    Taking out 3 must leave the cached object at 4 (the real value), not 2.
+    """
+    product = make_product(current_stock=5)
+    change_behind_the_sessions_back(
+        db_session, "UPDATE products SET current_stock = 7 WHERE id = :id", product.id
+    )
+
+    stock_service.record_movement(db_session, product.id, movement(MovementType.OUT, 3))
+
+    assert stock_in_database(db_session, product.id) == 4
+    assert product.current_stock == 4
+
+
+def test_sync_does_not_mark_the_product_as_changed(db_session, make_product):
+    product = make_product(current_stock=5)
+
+    stock_service.record_movement(db_session, product.id, movement(MovementType.IN, 1))
+
+    assert product.current_stock == 6
+    assert product not in db_session.dirty

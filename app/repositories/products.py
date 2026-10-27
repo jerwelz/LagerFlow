@@ -25,6 +25,10 @@ def change_stock(db: Session, product_id: int, delta: int) -> int | None:
     not be negative. The database checks and changes the value in one step, so
     two requests cannot both take the last items. Returns the new stock, or
     None if nothing was updated.
+
+    synchronize_session=False: SQLAlchemy would otherwise recalculate the new
+    value in Python from the (possibly outdated) cached Product. The service
+    uses the value returned by the database instead.
     """
     stmt = (
         update(Product)
@@ -35,6 +39,7 @@ def change_stock(db: Session, product_id: int, delta: int) -> int | None:
         )
         .values(current_stock=Product.current_stock + delta)
         .returning(Product.current_stock)
+        .execution_options(synchronize_session=False)
     )
     return db.execute(stmt).scalar_one_or_none()
 
@@ -65,3 +70,31 @@ def list_products(
 def count_products(db: Session, *, search: str | None, include_inactive: bool) -> int:
     stmt = _apply_filters(select(func.count(Product.id)), search, include_inactive)
     return db.scalar(stmt) or 0
+
+
+# --- Inventory monitoring (active products only) ----------------------------------
+
+
+def list_active(db: Session) -> list[Product]:
+    stmt = select(Product).where(Product.is_active.is_(True)).order_by(Product.sku)
+    return list(db.scalars(stmt))
+
+
+def list_low_stock(db: Session) -> list[Product]:
+    stmt = (
+        select(Product)
+        .where(Product.is_active.is_(True), Product.current_stock < Product.min_stock)
+        .order_by(Product.sku)
+    )
+    return list(db.scalars(stmt))
+
+
+def stock_totals(db: Session) -> tuple[int, int, int, int]:
+    """Returns (active products, total units, low-stock products, out-of-stock products)."""
+    stmt = select(
+        func.count(Product.id),
+        func.coalesce(func.sum(Product.current_stock), 0),
+        func.count(Product.id).filter(Product.current_stock < Product.min_stock),
+        func.count(Product.id).filter(Product.current_stock == 0),
+    ).where(Product.is_active.is_(True))
+    return tuple(db.execute(stmt).one())

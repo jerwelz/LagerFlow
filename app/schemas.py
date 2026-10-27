@@ -13,10 +13,15 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
+    computed_field,
     field_validator,
 )
 
 from app.models import MovementType
+
+# SQLite stores integers as signed 64-bit values. Larger numbers from a client
+# would crash the database driver, so every unbounded integer input uses this limit.
+MAX_DB_INTEGER = 2**63 - 1
 
 
 def _normalize_sku(value):
@@ -41,7 +46,7 @@ class ProductCreate(BaseModel):
     sku: Sku
     name: ProductName
     description: Description | None = None
-    min_stock: int = Field(default=0, ge=0)
+    min_stock: int = Field(default=0, ge=0, le=MAX_DB_INTEGER)
 
 
 class ProductUpdate(BaseModel):
@@ -56,7 +61,7 @@ class ProductUpdate(BaseModel):
     sku: Sku | None = None
     name: ProductName | None = None
     description: Description | None = None
-    min_stock: int | None = Field(default=None, ge=0)
+    min_stock: int | None = Field(default=None, ge=0, le=MAX_DB_INTEGER)
 
     @field_validator("sku", "name", "min_stock")
     @classmethod
@@ -110,3 +115,35 @@ class StockMovementRead(BaseModel):
     quantity: int
     reason: str | None
     created_at: datetime
+
+
+class StockMovementList(BaseModel):
+    items: list[StockMovementRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class StockLevel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sku: str
+    name: str
+    current_stock: int
+    min_stock: int
+
+    @computed_field
+    @property
+    def is_low(self) -> bool:
+        # Same rule as the low-stock query: strictly below the minimum.
+        return self.current_stock < self.min_stock
+
+
+class InventorySummary(BaseModel):
+    """Totals over all active products."""
+
+    active_products: int
+    total_units: int
+    low_stock_products: int
+    out_of_stock_products: int

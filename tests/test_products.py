@@ -316,3 +316,24 @@ def test_products_cannot_be_deleted(client, make_product):
     response = client.delete(f"/products/{product.id}")
 
     assert response.status_code == 405
+
+
+# --- Encoding ---------------------------------------------------------------------
+
+
+def test_non_ascii_names_round_trip(client):
+    created = create(client, sku="DUE-6", name="Dübel 6 mm", description="Größe: 6×30")
+
+    product = client.get(f"/products/{created.json()['id']}").json()
+
+    assert product["name"] == "Dübel 6 mm"
+    assert product["description"] == "Größe: 6×30"
+
+
+def test_body_that_is_not_utf8_returns_400_in_standard_format(client):
+    body = '{"sku": "X-1", "name": "D\xfcbel"}'.encode("latin-1")
+
+    response = client.post("/products", content=body, headers={"Content-Type": "application/json"})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "HTTP_ERROR"

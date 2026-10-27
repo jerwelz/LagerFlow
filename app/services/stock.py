@@ -5,6 +5,7 @@ transaction, so the stock level and the movement history always agree.
 """
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.errors import ConflictError
 from app.models import MovementType, Product, StockMovement
@@ -37,11 +38,15 @@ def record_movement(db: Session, product_id: int, data: StockMovementCreate) -> 
     try:
         # Step 2: the conditional UPDATE re-checks the rules inside the database,
         # in case another request changed the product after step 1.
-        if product_repo.change_stock(db, product.id, delta) is None:
+        new_stock = product_repo.change_stock(db, product.id, delta)
+        if new_stock is None:
             db.rollback()
             db.refresh(product)
             _ensure_movement_allowed(product, data)  # raises with the up-to-date numbers
             raise ConflictError("Stock changed during the request; please retry.")
+        # Keep the Python object in sync with the value the database actually stored.
+        # set_committed_value does not mark the object as changed (no extra UPDATE).
+        set_committed_value(product, "current_stock", new_stock)
 
         movement = StockMovement(
             product_id=product.id,
@@ -56,3 +61,12 @@ def record_movement(db: Session, product_id: int, data: StockMovementCreate) -> 
         db.rollback()
         raise
     return movement
+
+
+def list_movements(
+    db: Session, product_id: int, *, limit: int, offset: int
+) -> tuple[list[StockMovement], int]:
+    get_product(db, product_id)  # 404 if it does not exist; inactive products are fine
+    items = movement_repo.list_for_product(db, product_id, limit=limit, offset=offset)
+    total = movement_repo.count_for_product(db, product_id)
+    return items, total

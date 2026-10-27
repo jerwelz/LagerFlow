@@ -2,17 +2,18 @@
 
 from fastapi import FastAPI
 
-from app.api import movements, products
+from app.api import inventory, movements, products
 from app.errors import register_exception_handlers
 
 app = FastAPI(
     title="LagerFlow",
-    version="0.1.0",
+    version="1.0.0",
     description="REST API for managing inventory in a small business.",
 )
 register_exception_handlers(app)
 app.include_router(products.router)
 app.include_router(movements.router)
+app.include_router(inventory.router)
 
 
 @app.get("/health", tags=["health"])

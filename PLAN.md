@@ -3,7 +3,12 @@
 ## Context
 LagerFlow is a small inventory REST API, built as a GitHub portfolio project for FIAE apprenticeship applications (Munich, 2027). The goal is a clean, well-tested MVP that takes about two days and that the author can fully explain in an interview.
 
-**First step after approval:** save this plan as `PLAN.md` in the project root. Plan mode only lets me write this file, so I'll copy it there once you approve.
+This is the original plan written before implementation. The README describes the finished project. Deviations made during development:
+- `GET /products/{id}/movements` was first reserved as a manual exercise, but was implemented together with milestone 4.
+- The movement history uses the same paginated envelope as `GET /products` (`items`, `total`, `limit`, `offset`) instead of a plain list.
+- The SKU can be changed via `PATCH`; duplicates return 409.
+- Integer inputs are capped at the 64-bit database limit, so oversized values return 422 instead of 500.
+- The CSV export neutralises cells that spreadsheet programs would run as formulas.
 
 ---
 
@@ -86,7 +91,7 @@ Composite index: `(product_id, created_at)` makes per-product history queries fa
 | PATCH | `/products/{id}` | Update name, description, min_stock | 200 | 404, 409 SKU, 422 if `current_stock` is sent |
 | POST | `/products/{id}/deactivate` | Soft-delete (`is_active=false`) | 200 | 404 |
 | POST | `/products/{id}/movements` | Record IN/OUT movement | 201 | 404, 409 insufficient stock, 409 inactive product, 422 |
-| GET | `/products/{id}/movements` | **Reserved for you** (see §9) | 200 | 404 |
+| GET | `/products/{id}/movements` | Movement history (see §9) | 200 | 404 |
 | GET | `/inventory/levels` | Current stock for all active products, with an `is_low` flag | 200 | – |
 | GET | `/inventory/low-stock` | Active products where `current_stock < min_stock` | 200 | – |
 | GET | `/inventory/summary` | Product count, total units, low-stock count, out-of-stock count | 200 | – |
@@ -128,8 +133,7 @@ This works through custom exceptions raised in services plus handlers registered
 ## 6. Milestones
 1. **Foundation (~½ day):** `pyproject.toml`, config, database (FK pragma), models, first Alembic migration, error handling, `/health`, test fixtures.
 2. **Products (~½ day):** schemas, repository, service and routes for create/get/list/update/deactivate, plus tests.
-3. **Stock movements (~½ day):** atomic IN/OUT service, POST endpoint, tests including atomicity. **You then implement the reserved endpoint.**
-4. **Monitoring, reporting and polish (~½ day):** levels, low-stock, summary, CSV export, tests, README (setup, design decisions, example requests), ruff cleanup.
+3. **Stock movements (~½ day):** atomic IN/OUT service, POST endpoint, tests including atomicity.4. **Monitoring, reporting and polish (~½ day):** levels, low-stock, summary, CSV export, tests, README (setup, design decisions, example requests), ruff cleanup.
 
 ## 7. Technical risks
 - **SQLite foreign keys are off by default.** They need `PRAGMA foreign_keys=ON` through an engine connect event, or the FK constraints do nothing.
@@ -147,22 +151,19 @@ This works through custom exceptions raised in services plus handlers registered
 - Error responses use the same format everywhere.
 - `ruff check` is clean.
 - The README explains setup, architecture, design decisions and example calls.
-- The reserved endpoint and its tests are written by you.
+- The movement history endpoint (§9) is implemented and tested.
 - The Git history has meaningful commits, roughly one per milestone step.
 
-## 9. Your endpoint: `GET /products/{id}/movements`
+## 9. Movement history: `GET /products/{id}/movements`
 Return the movement history of one product, newest first, with `limit`/`offset` pagination.
 - 404 with the standard error format if the product doesn't exist.
-- Response: a list of `StockMovementRead` (this schema already exists from milestone 3).
-- Tests to write:
+- Response: a paginated list of `StockMovementRead` (the schema from milestone 3).
+- Tests:
   - empty history
   - correct order after several movements
   - pagination
   - 404 for an unknown product
   - movements of other products are not included
-
-It touches every layer (route, service, repository, schema reuse, tests) without being complex. I won't write this one unless you ask.
-
 ## Five concepts for the interview
 1. **Layered architecture:** why routes, services and repositories are separate, and what each layer is responsible for.
 2. **Transactions and atomicity (ACID):** why the stock update and the movement record must be committed together.
